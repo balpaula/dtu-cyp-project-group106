@@ -76,6 +76,7 @@ def predict(model, loader, task, mean, std):
     values = np.concatenate(out)
     if not np.isfinite(values).all():
         raise RuntimeError('Nonfinite predictions')
+    values = np.stack([values[i:i+10].mean(axis=0) for i in range(0, len(values), 10)])  # average over the 10 conformers per molecule
     return values
 
 
@@ -93,8 +94,8 @@ def train_torch(cfg, train, val, targets, task, data, out):
         std = torch.tensor(train[targets].std(ddof=0).to_numpy(), dtype=torch.float32,
                            device=model.device).clamp_min(1e-6)
     batch_size = cfg.train.batch_size
-    train_loader = model.loader(train, targets, batch_size, shuffle=True)
-    val_loader = model.loader(val, targets, batch_size)
+    train_loader = model.loader(train, targets, batch_size, shuffle=True, mode="train")
+    val_loader = model.loader(val, targets, batch_size, mode="eval")
     optimizer = torch.optim.AdamW(model.param_groups(), weight_decay=cfg.train.weight_decay)
     best = float('inf')
     for epoch in range(1, cfg.train.epochs + 1):
@@ -132,7 +133,7 @@ def train_torch(cfg, train, val, targets, task, data, out):
     model.load_state_dict(saved['model'])
     mean, std = saved['mean'], saved['std']
     print(f'Best epoch: {saved["epoch"]}', flush=True)
-    return lambda frame: predict(model, model.loader(frame, targets, batch_size), task, mean, std)
+    return lambda frame: predict(model, model.loader(frame, targets, batch_size, mode="eval"), task, mean, std)
 
 
 def cfg_dict(cfg):

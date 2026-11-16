@@ -11,7 +11,9 @@ set -euo pipefail
 
 # Submit from the starter directory. Set up this venv BEFORE submitting.
 cd "${LS_SUBCWD:?Submit using bsub from the starter directory}"
-source "${CYP_VENV:-$PWD/.venv}/bin/activate"
+# source "${CYP_VENV:-$PWD/.venv}/bin/activate" # Replaced with conda env
+source ~/miniconda3/etc/profile.d/conda.sh
+conda activate myenv
 export OMP_NUM_THREADS=1
 export MKL_NUM_THREADS=1
 
