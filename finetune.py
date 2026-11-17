@@ -109,7 +109,7 @@ def train_torch(cfg, train, val, targets, task, data, out):
         loss_sum, observed = 0., 0
         for batch in train_loader:
             y = batch['y'].to(model.device)
-            loss = masked_loss(model(batch).float(), y, task, mean, std, l2sp)
+            loss = masked_loss(model, model(batch).float(), y, task, mean, std, l2sp)
             if loss is None:
                 continue
             if not torch.isfinite(loss):
