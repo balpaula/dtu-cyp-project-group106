@@ -20,15 +20,19 @@ from models import MODELS
 from models.gbm import LightGBMModel
 from prepare_data import REG, CLS
 
+from l2sp_regularization import L2SP
 
-def masked_loss(pred, y, task, mean, std):
+
+def masked_loss(model, pred, y, task, mean, std, l2sp):
     mask = torch.isfinite(y)
     if not mask.any():
         return None
     # Index BEFORE applying the loss: multiplying NaN losses by zero is not safe.
     if task == 'regression':
         return nn.functional.mse_loss(pred[mask], ((y - mean) / std)[mask])
-    return nn.functional.binary_cross_entropy_with_logits(pred[mask], y[mask])
+    bce_loss = nn.functional.binary_cross_entropy_with_logits(pred[mask], y[mask])
+    return bce_loss + l2sp(model)
+
 
 
 def metrics(frame, predictions, targets, task):
@@ -85,6 +89,8 @@ def train_torch(cfg, train, val, targets, task, data, out):
     if cfg.train.epochs < 1 or cfg.train.batch_size < 1:
         raise ValueError('epochs and batch_size must be positive')
     model = MODELS[cfg.model.type](cfg.model, cfg.readout, len(targets), data, cfg.device)
+    initial_weights = [param.data.clone() for param in model.parameters()]
+    l2sp = L2SP(initial_weights, alpha=cfg.train.l2sp_alpha)
     model.fit_preprocessing(train)  # Feature scaling etc. is fitted on the training split ONLY.
     mean = torch.zeros(len(targets), device=model.device)
     std = torch.ones_like(mean)
@@ -103,7 +109,7 @@ def train_torch(cfg, train, val, targets, task, data, out):
         loss_sum, observed = 0., 0
         for batch in train_loader:
             y = batch['y'].to(model.device)
-            loss = masked_loss(model(batch).float(), y, task, mean, std)
+            loss = masked_loss(model(batch).float(), y, task, mean, std, l2sp)
             if loss is None:
                 continue
             if not torch.isfinite(loss):
